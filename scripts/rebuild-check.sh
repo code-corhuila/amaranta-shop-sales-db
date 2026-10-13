@@ -10,7 +10,8 @@
 #   3. every rollback script (05_rollbacks/) undoes the chain and leaves no schema behind;
 #   4. the chain applies again after being rolled back;
 #   5. the idempotency key refuses a repeated, malformed or orphan key;
-#   6. migrate also works over a copy of the monolith's existing sales tables, and keeps their data.
+#   6. sales_app can write in its own schema only, and sales_reader can only read;
+#   7. migrate also works over a copy of the monolith's existing sales tables, and keeps their data.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows must not rewrite the container paths below
@@ -34,6 +35,9 @@ fw() {
 }
 sql() { local db="$1"; shift; docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$db" "$@"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# The instance creates sales_app before anything is migrated (Annex J, J.5.2); here a bare stand-in does.
+sql amaranta -c "create role sales_app login"
 
 echo "== 1. migrate from an empty database"
 fw amaranta migrate
@@ -61,7 +65,10 @@ fw amaranta migrate
 echo "== 5. the idempotency key refuses what the checkout relies on it to refuse"
 sql amaranta < test/idempotency.sql
 
-echo "== 6. migrate over the monolith's existing sales tables"
+echo "== 6. sales_app writes only in schema sales, and only what the spec allows"
+sql amaranta < test/privileges.sql
+
+echo "== 7. migrate over the monolith's existing sales tables"
 sql postgres -c "create database adopted"
 sql adopted < test/fixtures/monolith-sales.sql
 fw adopted migrate
