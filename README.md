@@ -80,6 +80,17 @@ the order and its key in one transaction; a second request with the same key hit
 service answers with the order that already exists. The table also refuses keys outside 8-128 characters
 and keys of an order that does not exist. `test/idempotency.sql` proves it, inside the rebuild check.
 
+## Roles and grants
+
+`sales_reader` and `sales_writer` are `NOLOGIN` roles that carry permissions; `sales_app`, the login user the
+service connects with, is created by the infra repository from a secret, and `V011` grants it `sales_writer`.
+The grants are table by table and encode the spec: `orders` can be read, inserted and updated (it is marked
+as paid); `order_items` and `idempotency_key` can only be read and inserted, because a line and a key never
+change (RN-10, RN-12, RN-15); nothing can be deleted; the service cannot create tables or read the migration
+history. A new table brings its own `GRANT` in its own migration. Migrating before `sales_app` exists fails on
+purpose. `test/privileges.sql` proves all of it, and that `sales_app` reaches no table outside `sales`
+(Annex J, J.10), inside the rebuild check.
+
 ## How to run
 
 ```bash
@@ -101,5 +112,6 @@ monolith's tables without losing their data.
 
 ## Status
 
-Schema, `orders`, `order_items` and `idempotency_key`, with the listing index. Next: `feat/sales-roles-and-grants`
-(`sales_reader`, `sales_writer` and the grant to `sales_app`).
+Complete for the checkout: schema, `orders`, `order_items`, `idempotency_key`, roles and grants. A change to
+any of them is a new migration with its rollback. Next in the system: `amaranta-shop-sales-api` connects as
+`sales_app` and its integration tests run against this schema.
