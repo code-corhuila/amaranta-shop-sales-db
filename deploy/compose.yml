@@ -1,0 +1,26 @@
+# The migration runner of the sales domain (Annex J, J.7). There is no database service and no volume
+# here: the single PostgreSQL instance lives in amaranta-shop-infra-postgres, which includes this file.
+#
+# From amaranta-shop-infra-postgres, with the instance up:
+#   docker compose --env-file env/dev.env run --rm sales-db-migrate
+# The runner connects as the administrator of the instance (it creates the schema); the service never does.
+name: amaranta-shop-sales-db
+
+services:
+  sales-db-migrate:
+    image: flyway/flyway:11.20
+    profiles: [tooling]
+    volumes:
+      - ../:/workspace:ro
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?set PG_DATABASE in the environment file}
+      FLYWAY_USER: ${PG_ADMIN_USER:?set PG_ADMIN_USER in the environment file}
+      FLYWAY_PASSWORD: ${PG_ADMIN_PASSWORD:?set PG_ADMIN_PASSWORD in the environment file}
+    entrypoint: ["flyway", "-workingDirectory=/workspace", "-configFiles=flyway.toml"]
+    command: ["migrate"]
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform
+    external: true
