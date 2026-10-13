@@ -1,0 +1,52 @@
+name: Database rebuild
+
+# The whole migration chain must build the schema from an EMPTY database, every rollback script must undo
+# it, and the chain must apply again afterwards. If the only place the schema works is where it was
+# patched by hand, the next environment cannot exist. The check itself is scripts/rebuild-check.sh, so a
+# red pull request can be reproduced locally.
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The repository has its minimum content
+        run: |
+          for file in README.md .github/CODEOWNERS .gitignore .env.example flyway.toml deploy/compose.yml; do
+            [ -f "$file" ] || { echo "missing $file"; exit 1; }
+          done
+
+      - name: No real environment file or key is versioned
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|\.pem$|(^|/)keys/'; then
+            echo "A real environment file or key is versioned"
+            exit 1
+          fi
+
+      - name: This database defines no database service and no volume (Annex J, J.10)
+        run: |
+          if grep -nE '^volumes:|image: *postgres' deploy/compose.yml; then
+            echo "deploy/compose.yml must hold only the migration runner"
+            exit 1
+          fi
+
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, roll back, rebuild, and adopt the monolith's tables
+        run: bash scripts/rebuild-check.sh
