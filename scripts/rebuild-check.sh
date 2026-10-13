@@ -9,7 +9,8 @@
 #   2. a second migrate applies nothing, and validate finds no edited migration;
 #   3. every rollback script (05_rollbacks/) undoes the chain and leaves no schema behind;
 #   4. the chain applies again after being rolled back;
-#   5. migrate also works over a copy of the monolith's existing sales tables, and keeps their data.
+#   5. the idempotency key refuses a repeated, malformed or orphan key;
+#   6. migrate also works over a copy of the monolith's existing sales tables, and keeps their data.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows must not rewrite the container paths below
@@ -57,7 +58,10 @@ done
 echo "== 4. the chain applies again"
 fw amaranta migrate
 
-echo "== 5. migrate over the monolith's existing sales tables"
+echo "== 5. the idempotency key refuses what the checkout relies on it to refuse"
+sql amaranta < test/idempotency.sql
+
+echo "== 6. migrate over the monolith's existing sales tables"
 sql postgres -c "create database adopted"
 sql adopted < test/fixtures/monolith-sales.sql
 fw adopted migrate

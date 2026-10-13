@@ -73,6 +73,13 @@ tables skips what exists and keeps every order. Only names differ there (generat
 name**. Two declared deviations, both from the spec: money stays in **whole pesos** (OD-1) and the tables keep
 their **plural names** (OD-4); a rename is expand-then-contract, later, with its own ADR.
 
+## The idempotency key
+
+`sales.idempotency_key` is the database half of a retry-safe checkout (RN-15, CA-C1.6). `sales-api` writes
+the order and its key in one transaction; a second request with the same key hits the primary key, and the
+service answers with the order that already exists. The table also refuses keys outside 8-128 characters
+and keys of an order that does not exist. `test/idempotency.sql` proves it, inside the rebuild check.
+
 ## How to run
 
 ```bash
@@ -94,6 +101,5 @@ monolith's tables without losing their data.
 
 ## Status
 
-Schema, `orders` and `order_items`. Next, each its own pull request: `feat/sales-idempotency-key`
-(`sales.idempotency_key`, rule RN-15), then `feat/sales-roles-and-grants` (`sales_reader`, `sales_writer`
-and the grant to `sales_app`).
+Schema, `orders`, `order_items` and `idempotency_key`, with the listing index. Next: `feat/sales-roles-and-grants`
+(`sales_reader`, `sales_writer` and the grant to `sales_app`).
