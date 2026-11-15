@@ -18,7 +18,13 @@ INSERT INTO sales.order_items (order_id, product_id, product_name, unit_price_am
 VALUES ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f3', 'Cat toy', 2000, 1, 2000);
 INSERT INTO sales.idempotency_key (key, order_id)
 VALUES ('privileges-key-1', '00000000-0000-0000-0000-0000000000f1');
+INSERT INTO sales.outbox_messages (id, event_type, aggregate_type, aggregate_id, topic, payload_json, created_at)
+VALUES ('00000000-0000-0000-0000-0000000000f4', 'OrderCreated', 'Order',
+        '00000000-0000-0000-0000-0000000000f1', 'sales.order.created',
+        '{"customerId":"00000000-0000-0000-0000-0000000000f2"}'::jsonb, now());
 UPDATE sales.orders SET status = 'PAID' WHERE id = '00000000-0000-0000-0000-0000000000f1';
+UPDATE sales.outbox_messages SET attempts = attempts + 1, last_error = 'broker unavailable', status = 'FAILED'
+WHERE id = '00000000-0000-0000-0000-0000000000f4';
 SELECT count(*) FROM sales.orders;
 
 -- What it must NOT be able to do.
@@ -30,6 +36,10 @@ BEGIN
 
     BEGIN UPDATE sales.idempotency_key SET order_id = order_id;
         RAISE EXCEPTION 'an idempotency key can be rewritten';
+    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+
+    BEGIN UPDATE sales.outbox_messages SET payload_json = '{}'::jsonb;
+        RAISE EXCEPTION 'an outbox payload can be rewritten';
     EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 
     BEGIN DELETE FROM sales.orders;
